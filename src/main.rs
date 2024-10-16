@@ -15,7 +15,9 @@ fn main() {
 
     for file in walk_dir {
         let file_path = file.unwrap();
-        let file_checksum = hash_file(file_path.path(), Algorithm::CRC32);
-        println!("{} {:?}", file_checksum, file_path.path())
+        if file_path.path().is_file() {
+            let file_checksum = hash_file(file_path.path(), Algorithm::CRC64);
+            println!("{} {:?}", file_checksum, file_path.path())
+        }
     }
 }
