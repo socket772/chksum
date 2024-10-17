@@ -1,12 +1,5 @@
 use md5::{Digest, Md5};
-use std::{
-    borrow::Borrow,
-    env::args,
-    fs::{read_to_string, File},
-    io::BufReader,
-    os::fd::AsRawFd,
-    time::Instant,
-};
+use std::{env::args, fs::read_to_string, time::Instant};
 use walkdir::WalkDir;
 
 // https://reveng.sourceforge.io/crc-catalogue/all.htm
@@ -41,28 +34,26 @@ fn cycle(walk_dir: WalkDir) {
     let mut successi: u32 = 0;
     let mut errori: u32 = 0;
     for file in walk_dir {
-        if !file.is_err() {
+        if file.is_ok() {
             let mut hasher = Md5::new();
             let file_path = file.unwrap();
             let file_string = read_to_string(file_path.path());
-            if !file_string.is_err() {
+            if file_string.is_ok() {
                 hasher.update(file_string.unwrap());
                 let hash = hasher.finalize();
                 if file_path.path().is_file() && file_path.path().exists() {
                     println!("{:?} {:?}", hash, file_path.path());
-                    successi = successi + 1;
+                    successi += 1;
                 }
             } else {
                 // println!("Errore lettura del file o è una cartella -> {:?}", file_path);
-                errori = errori + 1;
+                errori += 1;
             }
         } else {
             // println!("Errore, file o cartella non esiste");
-            errori = errori + 1;
+            errori += 1;
         }
     }
 
     println!("Successi {}, Errori {}", successi, errori);
-
-    return;
 }
