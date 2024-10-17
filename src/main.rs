@@ -1,5 +1,5 @@
 use md5::{Digest, Md5};
-use std::{env::args, fs::File, io::BufReader, time::Instant};
+use std::{env::args, fs::File, io::Read, time::Instant};
 use walkdir::WalkDir;
 
 // https://reveng.sourceforge.io/crc-catalogue/all.htm
@@ -15,12 +15,11 @@ fn main() {
         return;
     }
 
-    let walk_dir: WalkDir = WalkDir::new(args[1].clone()).follow_links(true);
-
     // Avvia time benchmark
     let now = Instant::now();
 
     println!("Parte programma");
+    let walk_dir: WalkDir = WalkDir::new(args[1].clone()).follow_links(true);
     cycle(walk_dir);
 
     // Fine benchmark
@@ -42,13 +41,15 @@ fn cycle(walk_dir: WalkDir) {
             if file_direntry.path().exists() {
                 let file_open = File::open(file_direntry.path());
                 if file_direntry.path().is_file() && file_open.is_ok() {
-                    let reader = BufReader::new(file_open.unwrap());
+                    let buffer: &mut Vec<u8> = &mut vec![];
+                    let buffer_result = file_open.unwrap().read_to_end(buffer);
+                    if buffer_result.is_ok() {
+                        hasher.update(buffer);
+                        let hash = hasher.finalize();
 
-                    hasher.update(reader.buffer());
-                    let hash = hasher.finalize();
-
-                    println!("{:?} {:?}", hash, file_direntry.path());
-                    successi += 1;
+                        println!("{:?} {:?}", hex::encode(hash), file_direntry.path());
+                        successi += 1;
+                    }
                 } else if file_direntry.path().is_dir() {
                     println!("{:?} è una cartella", file_direntry.path());
                     cartella += 1;
@@ -60,6 +61,9 @@ fn cycle(walk_dir: WalkDir) {
                 println!("Non esiste");
                 errori += 1;
             }
+        } else {
+            println!("Errore");
+            errori += 1;
         }
     }
 

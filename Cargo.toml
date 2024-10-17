@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+crc = "3.2.1"
+hex = "0.4.3"
+hex-literal = "0.4.1"
 md-5 = "0.10.6"
 num_cpus = "1.16.0"
 walkdir = "2.5.0"
