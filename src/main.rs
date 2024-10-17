@@ -4,9 +4,6 @@ use walkdir::WalkDir;
 // https://reveng.sourceforge.io/crc-catalogue/all.htm
 // CRC-32/CKSUM
 
-// 12 min circa con md5
-// xx min circa con crc32-cksum
-
 // Formato
 // crc,size(B),filepath
 const CHECKSUMMER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_CKSUM);
