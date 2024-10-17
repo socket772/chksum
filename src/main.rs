@@ -1,9 +1,15 @@
-use md5::{Digest, Md5};
-use std::{env::args, fs::File, io::Read, time::Instant};
+use std::{env::args, fs::File, io::Read, io::Write, time::Instant};
 use walkdir::WalkDir;
 
 // https://reveng.sourceforge.io/crc-catalogue/all.htm
 // CRC-32/CKSUM
+
+// 12 min circa con md5
+// xx min circa con crc32-cksum
+
+// Formato
+// crc,size(B),filepath
+const CHECKSUMMER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_CKSUM);
 
 fn main() {
     // args[1] = cartella
@@ -15,12 +21,11 @@ fn main() {
         return;
     }
 
+    println!("Parte programma");
     // Avvia time benchmark
     let now = Instant::now();
-
-    println!("Parte programma");
     let walk_dir: WalkDir = WalkDir::new(args[1].clone()).follow_links(true);
-    cycle(walk_dir);
+    cycle(walk_dir, args);
 
     // Fine benchmark
     println!(
@@ -29,40 +34,49 @@ fn main() {
     );
 }
 
-fn cycle(walk_dir: WalkDir) {
+fn cycle(walk_dir: WalkDir, args: Vec<String>) {
     let mut successi: u32 = 0;
     let mut cartella: u32 = 0;
     let mut errori: u32 = 0;
+    let mut output_file = File::create(args[2].clone()).unwrap();
+    output_file.write_all(b"").unwrap();
+    writeln!(output_file, "cksum,size,file").unwrap();
     for file in walk_dir {
         if file.is_ok() {
-            let mut hasher = Md5::new();
             let file_direntry = file.unwrap();
 
             if file_direntry.path().exists() {
                 let file_open = File::open(file_direntry.path());
+
                 if file_direntry.path().is_file() && file_open.is_ok() {
                     let buffer: &mut Vec<u8> = &mut vec![];
                     let buffer_result = file_open.unwrap().read_to_end(buffer);
-                    if buffer_result.is_ok() {
-                        hasher.update(buffer);
-                        let hash = hasher.finalize();
 
-                        println!("{:?} {:?}", hex::encode(hash), file_direntry.path());
+                    if buffer_result.is_ok() {
+                        writeln!(
+                            output_file,
+                            "{:?},{:?},{}",
+                            CHECKSUMMER.checksum(buffer),
+                            buffer.len(),
+                            file_direntry.path().to_str().unwrap()
+                        )
+                        .unwrap();
+
                         successi += 1;
                     }
                 } else if file_direntry.path().is_dir() {
-                    println!("{:?} è una cartella", file_direntry.path());
+                    // println!("{:?} è una cartella", file_direntry.path());
                     cartella += 1;
                 } else {
-                    println!("Errore");
+                    // println!("Errore");
                     errori += 1;
                 }
             } else {
-                println!("Non esiste");
+                // println!("Non esiste");
                 errori += 1;
             }
         } else {
-            println!("Errore");
+            // println!("Errore");
             errori += 1;
         }
     }
