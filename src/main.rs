@@ -1,8 +1,9 @@
 use std::{
+    default,
     env::args,
     fs::File,
     io::{Read, Write},
-    sync::Mutex,
+    sync::{Mutex, RwLock},
     time::Instant,
 };
 use walkdir::WalkDir;
@@ -17,8 +18,35 @@ const CHECKSUMMER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_CKSUM);
 // Successi, Cartelle, Errori
 static STATS: Mutex<[i32; 3]> = Mutex::new([0, 0, 0]);
 
+// Dimensione massima array
+const MAX_LENGHT: usize = 8;
+
+const DEFAULT_DATASET: DataSet = DataSet {
+    status: 0,
+    buffer: &mut Vec::new(),
+};
+
 // Array dei buffer
-static BUFFER_ARRAY: Mutex<Vec<&mut Vec<u8>>> = Mutex::new(Vec::<&mut Vec<u8>>::new());
+// 0 = empty
+// 1 = ready
+// 2 = working
+// 3 = to delete
+
+static BUFFER_ARRAY: [Mutex<DataSet>; MAX_LENGHT] = [
+    Mutex::new(DEFAULT_DATASET),
+    Mutex::new(DEFAULT_DATASET),
+    Mutex::new(DEFAULT_DATASET),
+    Mutex::new(DEFAULT_DATASET),
+    Mutex::new(DEFAULT_DATASET),
+    Mutex::new(DEFAULT_DATASET),
+    Mutex::new(DEFAULT_DATASET),
+    Mutex::new(DEFAULT_DATASET),
+];
+
+struct DataSet<'a> {
+    status: usize,
+    buffer: &'a mut Vec<u8>,
+}
 
 fn main() {
     // args[1] = cartella
@@ -34,7 +62,7 @@ fn main() {
     // Avvia time benchmark
     let now = Instant::now();
     let walk_dir: WalkDir = WalkDir::new(args[1].clone()).follow_links(true);
-    cycle(walk_dir, args);
+    ciclo_checksum(walk_dir, args);
 
     // Fine benchmark
     println!(
@@ -43,7 +71,8 @@ fn main() {
     );
 }
 
-fn cycle(walk_dir: WalkDir, args: Vec<String>) {
+// da aggiornare
+fn ciclo_checksum(walk_dir: WalkDir, args: Vec<String>) {
     let mut successi: u32 = 0;
     let mut cartella: u32 = 0;
     let mut errori: u32 = 0;
@@ -77,15 +106,15 @@ fn cycle(walk_dir: WalkDir, args: Vec<String>) {
                     // println!("{:?} è una cartella", file_direntry.path());
                     cartella += 1;
                 } else {
-                    // println!("Errore");
+                    println!("Errore");
                     errori += 1;
                 }
             } else {
-                // println!("Non esiste");
+                println!("Non esiste");
                 errori += 1;
             }
         } else {
-            // println!("Errore");
+            println!("Errore");
             errori += 1;
         }
     }
@@ -94,4 +123,29 @@ fn cycle(walk_dir: WalkDir, args: Vec<String>) {
         "Successi {}, Cartelle {}, Errori {}",
         successi, cartella, errori
     );
+}
+
+fn ciclo_lettore(walk_dir: WalkDir) {
+    let mut data_result;
+    for file in walk_dir {
+        if file.is_ok() {
+            let file_direntry = file.unwrap();
+            for element in 0..7 {
+                data_result = BUFFER_ARRAY[element].lock().unwrap();
+                if *&data_result.status == 0 {
+                    if file_direntry.path().exists() {
+                        let file_open = File::open(file_direntry.path());
+
+                        if file_direntry.path().is_file() && file_open.is_ok() {
+                            let buffer: &mut Vec<u8> = &mut vec![];
+                            let buffer_result = file_open.unwrap().read_to_end(buffer);
+                            if buffer_result.is_ok() {
+                                *data_result.buffer = buffer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
