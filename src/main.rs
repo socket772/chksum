@@ -1,4 +1,10 @@
-use std::{env::args, fs::File, io::Read, io::Write, time::Instant};
+use std::{
+    env::args,
+    fs::File,
+    io::{Read, Write},
+    sync::Mutex,
+    time::Instant,
+};
 use walkdir::WalkDir;
 
 // https://reveng.sourceforge.io/crc-catalogue/all.htm
@@ -7,6 +13,12 @@ use walkdir::WalkDir;
 // Formato
 // crc,size(B),filepath
 const CHECKSUMMER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_CKSUM);
+
+// Successi, Cartelle, Errori
+static STATS: Mutex<[i32; 3]> = Mutex::new([0, 0, 0]);
+
+// Array dei buffer
+static BUFFER_ARRAY: Mutex<Vec<&mut Vec<u8>>> = Mutex::new(Vec::<&mut Vec<u8>>::new());
 
 fn main() {
     // args[1] = cartella
