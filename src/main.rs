@@ -1,8 +1,7 @@
 use std::{
-    default,
     env::args,
     fs::File,
-    io::{BufRead, Read, Write},
+    io::{Read, Write},
     sync::{Mutex, RwLock},
     time::Instant,
 };
@@ -21,12 +20,17 @@ static STATS: Mutex<[i32; 3]> = Mutex::new([0, 0, 0]);
 // Dimensione massima array
 const MAX_LENGHT: usize = 8;
 
+//
+static READY_BUFFER: Mutex<u8> = Mutex::new(0);
+
 // Array degli stati dei buffer
 // 0 = empty
 // 1 = ready
 // 2 = working
 // 3 = to delete
 static STATUS_VECTOR: RwLock<[u8; MAX_LENGHT]> = RwLock::new([0; MAX_LENGHT]);
+
+static mut BUFFER_VECTOR: Vec<&mut Vec<u8>> = Vec::new();
 
 fn main() {
     // args[1] = cartella
@@ -38,14 +42,17 @@ fn main() {
         return;
     }
 
-    // vettore che contiene dei mutex che proteccono i buffer dei files. va usato con status vector
-    let mut buffer_vector: Vec<&mut Vec<u8>> = Vec::<&mut Vec<u8>>::new();
+    // Crea file di output
+    let mut output_file: File = File::create(args[2].clone()).unwrap();
+    output_file.write_all(b"").unwrap();
+    writeln!(output_file, "cksum,size,file").unwrap();
 
     println!("Parte programma");
     // Avvia time benchmark
     let now = Instant::now();
     let walk_dir: WalkDir = WalkDir::new(args[1].clone()).follow_links(true);
-    ciclo_checksum(walk_dir, args);
+    ciclo_lettore(walk_dir);
+    ciclo_checksum(&output_file);
 
     // Fine benchmark
     println!(
@@ -55,13 +62,30 @@ fn main() {
 }
 
 // da aggiornare
-fn ciclo_checksum(walk_dir: WalkDir, args: Vec<String>) {
+fn ciclo_checksum(mut output_file: &File) {
     let mut successi: u32 = 0;
     let mut cartella: u32 = 0;
     let mut errori: u32 = 0;
-    let mut output_file = File::create(args[2].clone()).unwrap();
-    output_file.write_all(b"").unwrap();
-    writeln!(output_file, "cksum,size,file").unwrap();
+
+    // prendo il lock dei buffer pronti
+    let mut lock_ready_buffer = READY_BUFFER.lock().unwrap();
+
+    if (*lock_ready_buffer) > 0 {
+        *lock_ready_buffer = *lock_ready_buffer - 1;
+        drop(lock_ready_buffer);
+        for i in 0..MAX_LENGHT {
+            // prendo il lock in scrittura per annunciare (se libero lo slot) l'uso del buffer in posizione i
+            let lock_status_write = STATUS_VECTOR.write().unwrap();
+            if (*lock_status_write)[i] == 1 {
+                (*lock_status_write)[i] = 2;
+                drop(lock_status_write);
+                let checksum = CHECKSUMMER.checksum(unsafe { BUFFER_VECTOR[i] });
+            }
+        }
+    } else {
+        todo!();
+    }
+
     for file in walk_dir {
         if file.is_ok() {
             let file_direntry = file.unwrap();
@@ -108,11 +132,34 @@ fn ciclo_checksum(walk_dir: WalkDir, args: Vec<String>) {
     );
 }
 
-fn ciclo_lettore(walk_dir: WalkDir, buffer_vector: Vec<&mut Vec<u8>>) {
+fn ciclo_lettore(walk_dir: WalkDir) {
     for file in walk_dir {
         if file.is_ok() {
             let file_direntry = file.unwrap();
-            for element in 0..7 {}
+            for i in 0..MAX_LENGHT {
+                let lock_read = STATUS_VECTOR.read().unwrap();
+                if (*lock_read)[i] == 0 || (*lock_read)[i] == 3 {
+                    if file_direntry.path().exists() {
+                        let file_open = File::open(file_direntry.path());
+
+                        if file_direntry.path().is_file() && file_open.is_ok() {
+                            let buffer: &mut Vec<u8> = &mut Vec::<u8>::new();
+                            let _ = file_open.unwrap().read_to_end(buffer);
+
+                            unsafe {
+                                *BUFFER_VECTOR[i] = buffer.clone();
+                            }
+                            drop(lock_read);
+                            let mut lock_write = STATUS_VECTOR.write().unwrap();
+                            (*lock_write)[i] = 1;
+                            drop(lock_write);
+                            let mut lock_ready = READY_BUFFER.lock().unwrap();
+                            *lock_ready = *lock_ready + 1;
+                            drop(lock_ready);
+                        }
+                    }
+                }
+            }
         }
     }
 }
