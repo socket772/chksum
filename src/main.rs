@@ -2,7 +2,7 @@ use std::{
     default,
     env::args,
     fs::File,
-    io::{Read, Write},
+    io::{BufRead, Read, Write},
     sync::{Mutex, RwLock},
     time::Instant,
 };
@@ -21,32 +21,12 @@ static STATS: Mutex<[i32; 3]> = Mutex::new([0, 0, 0]);
 // Dimensione massima array
 const MAX_LENGHT: usize = 8;
 
-const DEFAULT_DATASET: DataSet = DataSet {
-    status: 0,
-    buffer: &mut Vec::new(),
-};
-
-// Array dei buffer
+// Array degli stati dei buffer
 // 0 = empty
 // 1 = ready
 // 2 = working
 // 3 = to delete
-
-static BUFFER_ARRAY: [Mutex<DataSet>; MAX_LENGHT] = [
-    Mutex::new(DEFAULT_DATASET),
-    Mutex::new(DEFAULT_DATASET),
-    Mutex::new(DEFAULT_DATASET),
-    Mutex::new(DEFAULT_DATASET),
-    Mutex::new(DEFAULT_DATASET),
-    Mutex::new(DEFAULT_DATASET),
-    Mutex::new(DEFAULT_DATASET),
-    Mutex::new(DEFAULT_DATASET),
-];
-
-struct DataSet<'a> {
-    status: usize,
-    buffer: &'a mut Vec<u8>,
-}
+static STATUS_VECTOR: RwLock<[u8; MAX_LENGHT]> = RwLock::new([0; MAX_LENGHT]);
 
 fn main() {
     // args[1] = cartella
@@ -57,6 +37,9 @@ fn main() {
         println!("Errore, passa 3 argomenti. cartella file_output");
         return;
     }
+
+    // vettore che contiene dei mutex che proteccono i buffer dei files. va usato con status vector
+    let mut buffer_vector: Vec<&mut Vec<u8>> = Vec::<&mut Vec<u8>>::new();
 
     println!("Parte programma");
     // Avvia time benchmark
@@ -125,27 +108,11 @@ fn ciclo_checksum(walk_dir: WalkDir, args: Vec<String>) {
     );
 }
 
-fn ciclo_lettore(walk_dir: WalkDir) {
-    let mut data_result;
+fn ciclo_lettore(walk_dir: WalkDir, buffer_vector: Vec<&mut Vec<u8>>) {
     for file in walk_dir {
         if file.is_ok() {
             let file_direntry = file.unwrap();
-            for element in 0..7 {
-                data_result = BUFFER_ARRAY[element].lock().unwrap();
-                if *&data_result.status == 0 {
-                    if file_direntry.path().exists() {
-                        let file_open = File::open(file_direntry.path());
-
-                        if file_direntry.path().is_file() && file_open.is_ok() {
-                            let buffer: &mut Vec<u8> = &mut vec![];
-                            let buffer_result = file_open.unwrap().read_to_end(buffer);
-                            if buffer_result.is_ok() {
-                                *data_result.buffer = buffer;
-                            }
-                        }
-                    }
-                }
-            }
+            for element in 0..7 {}
         }
     }
 }
