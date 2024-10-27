@@ -30,7 +30,9 @@ static READY_BUFFER: Mutex<u8> = Mutex::new(0);
 // 3 = to delete
 static STATUS_VECTOR: RwLock<[u8; MAX_LENGHT]> = RwLock::new([0; MAX_LENGHT]);
 
-static mut BUFFER_VECTOR: Vec<&mut Vec<u8>> = Vec::new();
+static mut BUFFER_VECTOR: Vec<Vec<u8>> = Vec::new();
+
+static mut FILEPATH_VECTOR: Vec<String> = Vec::new();
 
 fn main() {
     // args[1] = cartella
@@ -40,6 +42,13 @@ fn main() {
     if args.len() != 3 {
         println!("Errore, passa 3 argomenti. cartella file_output");
         return;
+    }
+
+    for i in 0..MAX_LENGHT {
+        unsafe {
+            BUFFER_VECTOR[i] = Vec::new();
+            FILEPATH_VECTOR[i] = String::new();
+        }
     }
 
     // Crea file di output
@@ -76,10 +85,17 @@ fn ciclo_checksum(mut output_file: &File) {
         for i in 0..MAX_LENGHT {
             // prendo il lock in scrittura per annunciare (se libero lo slot) l'uso del buffer in posizione i
             let lock_status_write = STATUS_VECTOR.write().unwrap();
+            // se è pronto allora inizia l'elaborazione
             if (*lock_status_write)[i] == 1 {
+                // indica che il buffer p in uso
                 (*lock_status_write)[i] = 2;
+                // lascia il lock
                 drop(lock_status_write);
-                let checksum = CHECKSUMMER.checksum(unsafe { BUFFER_VECTOR[i] });
+                // calcola il checksum
+                unsafe {
+                    let checksum = CHECKSUMMER.checksum(&BUFFER_VECTOR[i]);
+                    println!("{:?},{}", checksum, FILEPATH_VECTOR[i]);
+                }
             }
         }
     } else {
@@ -138,25 +154,24 @@ fn ciclo_lettore(walk_dir: WalkDir) {
             let file_direntry = file.unwrap();
             for i in 0..MAX_LENGHT {
                 let lock_read = STATUS_VECTOR.read().unwrap();
-                if (*lock_read)[i] == 0 || (*lock_read)[i] == 3 {
-                    if file_direntry.path().exists() {
-                        let file_open = File::open(file_direntry.path());
+                if ((*lock_read)[i] == 0 || (*lock_read)[i] == 3) && file_direntry.path().exists() {
+                    let file_open = File::open(file_direntry.path());
 
-                        if file_direntry.path().is_file() && file_open.is_ok() {
-                            let buffer: &mut Vec<u8> = &mut Vec::<u8>::new();
-                            let _ = file_open.unwrap().read_to_end(buffer);
+                    if file_direntry.path().is_file() && file_open.is_ok() {
+                        let buffer: &mut Vec<u8> = &mut Vec::<u8>::new();
+                        let _ = file_open.unwrap().read_to_end(buffer);
 
-                            unsafe {
-                                *BUFFER_VECTOR[i] = buffer.clone();
-                            }
-                            drop(lock_read);
-                            let mut lock_write = STATUS_VECTOR.write().unwrap();
-                            (*lock_write)[i] = 1;
-                            drop(lock_write);
-                            let mut lock_ready = READY_BUFFER.lock().unwrap();
-                            *lock_ready = *lock_ready + 1;
-                            drop(lock_ready);
+                        unsafe {
+                            BUFFER_VECTOR[i] = buffer.clone();
+                            FILEPATH_VECTOR[i] = file_direntry.path().to_str().unwrap().to_string();
                         }
+                        drop(lock_read);
+                        let mut lock_write = STATUS_VECTOR.write().unwrap();
+                        (*lock_write)[i] = 1;
+                        drop(lock_write);
+                        let mut lock_ready = READY_BUFFER.lock().unwrap();
+                        *lock_ready = *lock_ready + 1;
+                        drop(lock_ready);
                     }
                 }
             }
