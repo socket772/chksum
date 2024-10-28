@@ -15,12 +15,12 @@ use walkdir::WalkDir;
 const CHECKSUMMER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_CKSUM);
 
 // Successi, Cartelle, Errori
-static STATS: Mutex<[i32; 3]> = Mutex::new([0, 0, 0]);
+static STATS: Mutex<[u32; 3]> = Mutex::new([0, 0, 0]);
 
 // Dimensione massima array
 const MAX_LENGHT: usize = 8;
 
-//
+// Buffer contenente il numero di buffer pronti all'uso
 static READY_BUFFER: Mutex<u8> = Mutex::new(0);
 
 // Array degli stati dei buffer
@@ -30,9 +30,14 @@ static READY_BUFFER: Mutex<u8> = Mutex::new(0);
 // 3 = to delete
 static STATUS_VECTOR: RwLock<[u8; MAX_LENGHT]> = RwLock::new([0; MAX_LENGHT]);
 
+// vettore di buffer
 static mut BUFFER_VECTOR: Vec<Vec<u8>> = Vec::new();
 
+// vettore che contiene i percorsi dei file nel vettore dei buffer
 static mut FILEPATH_VECTOR: Vec<String> = Vec::new();
+
+// booleano che indica la fine del programma, fa chiudere tutti i thread
+static BOOL_END: RwLock<bool> = RwLock::new(false);
 
 fn main() {
     // args[1] = cartella
@@ -73,79 +78,46 @@ fn main() {
 // da aggiornare
 fn ciclo_checksum(mut output_file: &File) {
     let mut successi: u32 = 0;
-    let mut cartella: u32 = 0;
-    let mut errori: u32 = 0;
+    // let mut cartella: u32 = 0;
+    // let mut errori: u32 = 0;
 
-    // prendo il lock dei buffer pronti
-    let mut lock_ready_buffer = READY_BUFFER.lock().unwrap();
-
-    if (*lock_ready_buffer) > 0 {
-        *lock_ready_buffer = *lock_ready_buffer - 1;
-        drop(lock_ready_buffer);
-        for i in 0..MAX_LENGHT {
-            // prendo il lock in scrittura per annunciare (se libero lo slot) l'uso del buffer in posizione i
-            let lock_status_write = STATUS_VECTOR.write().unwrap();
-            // se è pronto allora inizia l'elaborazione
-            if (*lock_status_write)[i] == 1 {
-                // indica che il buffer p in uso
-                (*lock_status_write)[i] = 2;
-                // lascia il lock
-                drop(lock_status_write);
-                // calcola il checksum
-                unsafe {
-                    let checksum = CHECKSUMMER.checksum(&BUFFER_VECTOR[i]);
-                    println!("{:?},{}", checksum, FILEPATH_VECTOR[i]);
-                }
-            }
+    loop {
+        // Controlla se è stata chiamata la fine del programma
+        if *BOOL_END.read().unwrap() {
+            break;
         }
-    } else {
-        todo!();
-    }
 
-    for file in walk_dir {
-        if file.is_ok() {
-            let file_direntry = file.unwrap();
+        // prendo il lock dei buffer pronti
+        let mut lock_ready_buffer = READY_BUFFER.lock().unwrap();
 
-            if file_direntry.path().exists() {
-                let file_open = File::open(file_direntry.path());
-
-                if file_direntry.path().is_file() && file_open.is_ok() {
-                    let buffer: &mut Vec<u8> = &mut vec![];
-                    let buffer_result = file_open.unwrap().read_to_end(buffer);
-
-                    if buffer_result.is_ok() {
-                        writeln!(
-                            output_file,
-                            "{:?},{:?},{}",
-                            CHECKSUMMER.checksum(buffer),
-                            buffer.len(),
-                            file_direntry.path().to_str().unwrap()
-                        )
-                        .unwrap();
-
-                        successi += 1;
+        // se ci sono buffer pronti, allora elabora il checksum
+        if (*lock_ready_buffer) > 0 {
+            *lock_ready_buffer -= 1;
+            drop(lock_ready_buffer);
+            for i in 0..MAX_LENGHT {
+                // prendo il lock in scrittura per annunciare (se libero lo slot) l'uso del buffer in posizione i
+                let mut lock_status_write = STATUS_VECTOR.write().unwrap();
+                // se è pronto allora inizia l'elaborazione
+                if (*lock_status_write)[i] == 1 {
+                    // indica che il buffer p in uso
+                    (*lock_status_write)[i] = 2;
+                    // lascia il lock
+                    drop(lock_status_write);
+                    // calcola il checksum
+                    unsafe {
+                        let checksum = CHECKSUMMER.checksum(&BUFFER_VECTOR[i]);
+                        // stampa il checksum, poi diventerà una scrittura su file
+                        println!("{:?},{}", checksum, FILEPATH_VECTOR[i]);
                     }
-                } else if file_direntry.path().is_dir() {
-                    // println!("{:?} è una cartella", file_direntry.path());
-                    cartella += 1;
-                } else {
-                    println!("Errore");
-                    errori += 1;
+                    successi += 1;
                 }
-            } else {
-                println!("Non esiste");
-                errori += 1;
             }
-        } else {
-            println!("Errore");
-            errori += 1;
         }
     }
-
-    println!(
-        "Successi {}, Cartelle {}, Errori {}",
-        successi, cartella, errori
-    );
+    println!("Successi Locali {}", successi);
+    // Aggiungi i successi all'array globale
+    let mut lock_stats = STATS.lock().unwrap();
+    (*lock_stats)[0] += successi;
 }
 
 fn ciclo_lettore(walk_dir: WalkDir) {
@@ -170,11 +142,13 @@ fn ciclo_lettore(walk_dir: WalkDir) {
                         (*lock_write)[i] = 1;
                         drop(lock_write);
                         let mut lock_ready = READY_BUFFER.lock().unwrap();
-                        *lock_ready = *lock_ready + 1;
+                        *lock_ready += 1;
                         drop(lock_ready);
                     }
                 }
             }
         }
     }
+    let mut lock_end = BOOL_END.write().unwrap();
+    *lock_end = true;
 }
