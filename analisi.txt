@@ -1,0 +1,54 @@
+Performance counter stats for 'find ./ -type f -exec cksum {} ;':
+
+         33.208,41 msec task-clock:u                     #    0,070 CPUs utilized
+                 0      context-switches:u               #    0,000 /sec
+                 0      cpu-migrations:u                 #    0,000 /sec
+        10.535.714      page-faults:u                    #  317,260 K/sec
+    45.912.641.238      cycles:u                         #    1,383 GHz
+    16.550.945.574      stalled-cycles-frontend:u        #   36,05% frontend cycles idle
+    54.745.288.448      instructions:u                   #    1,19  insn per cycle
+                                                  #    0,30  stalled cycles per insn
+     9.215.385.561      branches:u                       #  277,502 M/sec
+       514.695.348      branch-misses:u                  #    5,59% of all branches
+
+     471,240524809 seconds time elapsed
+
+      23,013851000 seconds user
+      10,522562000 seconds sys
+--------------------------------------------------------------------------------------------------------------------------------
+buffer 8
+Performance counter stats for 'cargo run --release -- /mnt/BigData/Backup/ /tmp/ignora.txt':
+
+        238.194,72 msec task-clock:u                     #    0,326 CPUs utilized
+                 0      context-switches:u               #    0,000 /sec
+                 0      cpu-migrations:u                 #    0,000 /sec
+        11.403.600      page-faults:u                    #   47,875 K/sec
+ 1.139.761.636.262      cycles:u                         #    4,785 GHz
+     3.120.283.174      stalled-cycles-frontend:u        #    0,27% frontend cycles idle
+   899.577.231.481      instructions:u                   #    0,79  insn per cycle
+                                                  #    0,00  stalled cycles per insn
+   117.006.473.789      branches:u                       #  491,222 M/sec
+        20.722.493      branch-misses:u                  #    0,02% of all branches
+
+     729,791380196 seconds time elapsed
+
+     209,398483000 seconds user
+      28,603925000 seconds sys
+--------------------------------------------------------------------------------------------------------------------------------
+Performance counter stats for './target/release/checksum-ricorsivo /mnt/BigData/Backup/ /tmp/ignora.txt':
+
+        233.165,86 msec task-clock:u                     #    0,327 CPUs utilized
+                 0      context-switches:u               #    0,000 /sec
+                 0      cpu-migrations:u                 #    0,000 /sec
+         9.953.871      page-faults:u                    #   42,690 K/sec
+ 1.120.131.079.195      cycles:u                         #    4,804 GHz
+     2.808.678.147      stalled-cycles-frontend:u        #    0,25% frontend cycles idle
+   888.722.470.018      instructions:u                   #    0,79  insn per cycle
+                                                  #    0,00  stalled cycles per insn
+   114.009.176.777      branches:u                       #  488,962 M/sec
+        18.170.410      branch-misses:u                  #    0,02% of all branches
+
+     712,627177409 seconds time elapsed
+
+     205,538501000 seconds user
+      27,436271000 seconds sys
