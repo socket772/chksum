@@ -72,7 +72,7 @@ fn main() {
     // writeln!(output_file, "cksum,size,file").unwrap();
 
     let mut thread_vector: Vec<thread::JoinHandle<()>> = vec![];
-    for _ in 0..9 {
+    for i in 0..9 {
         // Qui metto in nuovo thread nell'array, è come una lista.
         thread_vector.push(thread::spawn(move || {
             let mut lock_tipo = BOOL_TYPE.lock().unwrap();
@@ -82,10 +82,10 @@ fn main() {
                 println!("Creo thread lettore");
                 *lock_tipo = false;
                 drop(lock_tipo);
-                ciclo_lettore();
+                ciclo_lettore(i);
             } else {
                 println!("Creo thread checksum");
-                ciclo_checksum();
+                ciclo_checksum(i);
             }
         }));
     }
@@ -102,7 +102,7 @@ fn main() {
 }
 
 // da aggiornare
-fn ciclo_checksum() {
+fn ciclo_checksum(id: usize) {
     let mut successi: u32 = 0;
     // let mut cartella: u32 = 0;
     // let mut errori: u32 = 0;
@@ -110,7 +110,7 @@ fn ciclo_checksum() {
     loop {
         // Controlla se è stata chiamata la fine del programma
         if *BOOL_END.read().unwrap() {
-            // println!("CHKSUM: terminato");
+            println!("{} - CHKSUM: terminato", id);
             break;
         }
 
@@ -120,7 +120,10 @@ fn ciclo_checksum() {
         // se ci sono buffer pronti, allora elabora il checksum
         if (*lock_ready_buffer) > 0 {
             drop(lock_ready_buffer);
-            // println!("CHKSUM: almeno 1 buffer pronto, inizio elaborazione");
+            println!(
+                "{} - CHKSUM: almeno 1 buffer pronto, inizio elaborazione",
+                id
+            );
             for i in 0..MAX_LENGHT {
                 // prendo il lock in scrittura per annunciare (se libero lo slot) l'uso del buffer in posizione i
                 let mut lock_status_write = STATUS_VECTOR.write().unwrap();
@@ -135,7 +138,7 @@ fn ciclo_checksum() {
                     unsafe {
                         let checksum = CHECKSUMMER.checksum(&BUFFER_VECTOR[i]);
                         // stampa il checksum, poi diventerà una scrittura su file
-                        println!("{:?},{}", checksum, FILEPATH_VECTOR[i]);
+                        println!("{} - {:?},{}", id, checksum, FILEPATH_VECTOR[i]);
                     }
                     successi += 1;
                     (*STATUS_VECTOR.write().unwrap())[i] = 3;
@@ -145,7 +148,7 @@ fn ciclo_checksum() {
                 }
             }
         } else {
-            // println!("CHKSUM: non ho trovato buffer pronti")
+            println!("{} - CHKSUM: non ho trovato buffer pronti", id)
         }
     }
     // println!("Successi Locali {}", successi);
@@ -154,7 +157,7 @@ fn ciclo_checksum() {
     (*lock_stats)[0] += successi;
 }
 
-fn ciclo_lettore() {
+fn ciclo_lettore(id: usize) {
     // Trovo tutti i file/cartelle
     let args: Vec<String> = args().collect();
     let walk_dir: WalkDir = WalkDir::new(args[1].clone()).follow_links(true);
@@ -165,7 +168,7 @@ fn ciclo_lettore() {
             loader(file);
         }
     }
-    // println!("BUFF: Segnale di chiusura");
+    println!("{} - BUFF: Segnale di chiusura", id);
     // mando il segnale di fine dei buffer
     let mut lock_end = BOOL_END.write().unwrap();
     *lock_end = true;
@@ -173,14 +176,14 @@ fn ciclo_lettore() {
 
 // Funzione che effettua il caricamento in ram effettivo
 fn loader(file: DirEntry) {
-    // println!("{:?}", file);
+    println!("{:?}", file);
     let mut caricato = false;
     while !caricato {
         // controlla se il buffer è pieno
         let lock_ready = READY_BUFFER.lock().unwrap();
         // println!("BUFF: buffer riempito {}/{}", *lock_ready, MAX_LENGHT);
         if *lock_ready == MAX_LENGHT {
-            // println!("BUFF: buffer pieno -> {:?}", file.path());
+            println!("BUFF: buffer pieno -> {:?}", file.path());
             drop(lock_ready);
             continue;
         }
@@ -208,7 +211,7 @@ fn loader(file: DirEntry) {
                         FILEPATH_VECTOR[i] = file.path().to_str().unwrap().to_string();
                     }
                     drop(lock_read);
-                    // println!("BUFF: caricato con successo -> {:?}", file);
+                    println!("BUFF: caricato con successo -> {:?}", file);
 
                     // cambio lo stato del buffer nello slot i
                     let mut lock_write = STATUS_VECTOR.write().unwrap();
